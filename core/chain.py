@@ -2,10 +2,9 @@ from datetime import datetime
 from typing import Iterable, List, Any, Dict
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnablePassthrough
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.documents import Document
 
-from core.intent import build_retrieval_intents
 
 LOG_PATH = "debug_rag_trace.txt"
 MAX_DOC_CHARS = 800
@@ -50,12 +49,6 @@ def _log_query(x: ChainState) -> ChainState:
     return x
 
 
-def _log_sub_queries(x: ChainState) -> ChainState:
-    lines = [f"- {q}" for q in x.get("sub_queries", [])]
-    _append_log("sub_queries", lines or ["<empty>"])
-    return x
-
-
 def _log_retrieved(x: ChainState) -> ChainState:
     docs = x.get("retrieved", []) or []
     lines = []
@@ -73,24 +66,19 @@ def _log_final(x):
     return x
 
 
+def _to_retrieval_query(x: ChainState) -> str:
+    query = x.get("query", "") or ""
+    act = x.get("act") or "All"
+    if act and act != "All":
+        return f"{query}\nAct scope: {act}".strip()
+    return query.strip()
+
+
 def _to_retrieval_input(x: ChainState) -> Dict[str, Any]:
-    intents = build_retrieval_intents(
-        x.get("sub_queries", []),
-        x.get("query", ""),
-        x.get("act")
-    )
-    return {"intents": intents, "query": x.get("query", "")}
+    return {"act": x.get("act"), "query": x.get("query", "")}
 
 
-def _to_compress_input(x: ChainState) -> Dict[str, Any]:
-    return {"docs": x.get("retrieved", []), "query": x.get("query", "")}
-
-
-def _extract_retrieved(x: ChainState) -> List[Document]:
-    return x.get("retrieved", [])
-
-
-def build_chain(decomposer, retrievers, merger, compressor, answer_llm, use_compression: bool = True):
+def build_chain(retriever, answer_llm):
     def build_context(docs):
         return "\n\n".join(
             f"[{d.metadata.get('citation')}]\n{d.page_content}"
@@ -98,28 +86,17 @@ def build_chain(decomposer, retrievers, merger, compressor, answer_llm, use_comp
         )
 
     retrieval_chain = (
-        RunnableLambda(lambda x: {"sub_queries": x.get("sub_queries", []), "act": x.get("act"), "query": x.get("query", "")})
-        | RunnableLambda(_to_retrieval_input)
-        | RunnableParallel(**retrievers)
-        | merger
+        RunnableLambda(_to_retrieval_input)
+        | RunnableLambda(_to_retrieval_query)
+        | retriever
     )
-
-    if use_compression:
-        compress_chain = (
-            RunnableLambda(_to_compress_input)
-            | compressor
-        )
-    else:
-        compress_chain = RunnableLambda(_extract_retrieved)
 
     return (
         RunnableLambda(_ensure_input)
         | RunnableLambda(_log_query)
-        | RunnablePassthrough.assign(sub_queries=decomposer)
-        | RunnableLambda(_log_sub_queries)
         | RunnablePassthrough.assign(retrieved=retrieval_chain)
         | RunnableLambda(_log_retrieved)
-        | RunnablePassthrough.assign(docs=compress_chain)
+        | RunnablePassthrough.assign(docs=lambda x: x.get("retrieved", []))
         | RunnablePassthrough.assign(context=lambda x: build_context(x["docs"]))
         | ANSWER_PROMPT
         | answer_llm

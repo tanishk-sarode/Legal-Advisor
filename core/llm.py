@@ -3,7 +3,7 @@ from common.aws_setup import bedrock_client
 from common.config import LLM_MODEL, LLM_TEMPERATURE
 
 
-def get_decomposer_llm() -> ChatBedrockConverse:
+def get_retriever_llm() -> ChatBedrockConverse:
     return ChatBedrockConverse(
         client=bedrock_client,
         model=LLM_MODEL,
