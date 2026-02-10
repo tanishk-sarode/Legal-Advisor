@@ -1,4 +1,4 @@
-INDEX_NAME = "tanishk-rag-index-1"
+INDEX_NAME = "tanishk-rag-index-async"
 REGION = "us-east-2"
 LLM_MODEL = "meta.llama3-3-70b-instruct-v1:0"
 LLM_TEMPERATURE = 0.1

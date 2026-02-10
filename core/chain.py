@@ -1,66 +1,100 @@
-from typing import List, Any, Dict
+from typing import Any, Dict, List
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import (
+    Runnable,
+    RunnableLambda,
+    RunnableParallel,
+    RunnablePassthrough,
+)
 from langchain_core.documents import Document
 
-
-ANSWER_PROMPT = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        "You are a legal assistant grounded ONLY in the provided context.\n"
-        "Rules:\n"
-        "- Use only the provided context\n"
-        "- Cite exact article/section citations (e.g., Article 21 (COI), Section 279 (IPC))\n"
-        "- Some legal terms are composite; if the question is about a commonly used term that is not a named offence, answer by combining the relevant retrieved sections\n"
-        "- Do not guess or use external knowledge\n"
-        "- Be detailed, clear, and human in tone\n"
-        "- Prefer 2-4 short paragraphs plus a compact bullet list of cited sections and penalties\n"
-        "- If key details are missing in the context, briefly state what is missing in one short sentence at the end without boilerplate disclaimers"
-    ),
-    ("human", "Context:\n{context}\n\nQuestion:\n{query}")
-])
+from core.prompts import QUERY_GENERATOR_PROMPT, ANSWER_PROMPT
+from core.schema import ExpandedQuery, FinalAnswer, AnswerInput
 
 
 ChainState = Dict[str, Any]
 
 
-def _ensure_input(x: Any) -> ChainState:
-    if isinstance(x, dict):
-        return x
-    return {"query": str(x)}
+# ---------- Document Formatting (Runnable-native) ----------
+
+def format_docs(docs: List[Document]) -> str:
+    return "\n\n".join(
+        f"[{d.metadata.get('citation')}]\n{d.page_content}"
+        for d in docs
+    )
 
 
-def _to_retrieval_query(x: ChainState) -> str:
-    query = x.get("query", "") or ""
-    act = x.get("act") or "All"
-    if act and act != "All":
-        return f"{query}\nAct scope: {act}".strip()
-    return query.strip()
+# ---------- Prompt Input Builder (Typed) ----------
+
+def build_answer_input(x: AnswerInput) -> Dict[str, str]:
+    return {
+        "context": format_docs(x["docs"]),
+        "query": x["query"],
+    }
 
 
-def _to_retrieval_input(x: ChainState) -> Dict[str, Any]:
-    return {"act": x.get("act"), "query": x.get("query", "")}
+# ---------- Chain Builder ----------
 
+def build_chain(
+    answer_llm,
+    retriever,
+    answer_parser: PydanticOutputParser,
+    query_parser: PydanticOutputParser,
+) -> Runnable:
+    """
+    Builds a LangChain RAG pipeline with:
+    - LLM-based query expansion
+    - Multi-query vector retrieval
+    - Runnable-native context injection
+    - Structured output parsing
+    """
 
-def build_chain(retriever, answer_llm):
-    def build_context(docs):
-        return "\n\n".join(
-            f"[{d.metadata.get('citation')}]\n{d.page_content}"
-            for d in docs
+    # 1. Answer generation chain (NO deprecated APIs)
+    answer_chain = (
+        RunnableLambda(build_answer_input)
+        | ANSWER_PROMPT.partial(
+            format_instructions=answer_parser.get_format_instructions()
         )
+        | answer_llm
+        | answer_parser
+    )
+
+    # 2. Query generator chain
+    query_generator_chain = (
+        QUERY_GENERATOR_PROMPT
+        | answer_llm
+        # print llm response for debugging
+        # | RunnableLambda(lambda x: print(f"Query generatorLLM response: {x}") or x)
+        | query_parser
+    )
+
+    # 3. Expanded-query retrieval
+    def retrieve_with_expansion(x: ExpandedQuery) -> List[Document]:
+        queries = [x.primary_query, *x.similar_queries]
+        docs: List[Document] = []
+        for q in queries:
+            docs.extend(retriever.invoke(q))
+        return docs
 
     retrieval_chain = (
-        RunnableLambda(_to_retrieval_input)
-        | RunnableLambda(_to_retrieval_query)
-        | retriever
+        query_generator_chain
+        | RunnableLambda(retrieve_with_expansion)
+        # | RunnableLambda(lambda docs: print(f"Retrieved documents \n \n {docs}") or docs)
     )
 
-    return (
-        RunnableLambda(_ensure_input)
-        | RunnablePassthrough.assign(retrieved=retrieval_chain)
-        | RunnablePassthrough.assign(docs=lambda x: x.get("retrieved", []))
-        | RunnablePassthrough.assign(context=lambda x: build_context(x["docs"]))
-        | ANSWER_PROMPT
-        | answer_llm
+    # 4. Full pipeline
+    chain = (
+        RunnablePassthrough.assign(query=lambda x: x["query"])
+        | RunnableParallel(
+            docs=retrieval_chain,
+            query=lambda x: x["query"],
+        )
+        | RunnableParallel(
+            answer=answer_chain,
+            sources=lambda x: x["docs"],
+        )
     )
+
+    return chain

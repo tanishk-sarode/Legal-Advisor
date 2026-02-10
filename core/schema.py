@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, TypedDict
 from langchain_core.documents import Document
 
 
@@ -41,3 +41,20 @@ def build_metadata(
 
 def make_document(text: str, metadata: Dict[str, Optional[str]]) -> Document:
     return Document(page_content=text, metadata=metadata)
+
+from pydantic import BaseModel
+from typing import List
+
+class AnswerInput(TypedDict):
+    docs: List[Document]
+    query: str
+    
+class ExpandedQuery(BaseModel):
+    primary_query: str
+    similar_queries: List[str]
+
+
+class FinalAnswer(BaseModel):
+    answer: str
+    cited_sections: List[str]
+

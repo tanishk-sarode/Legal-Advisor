@@ -28,4 +28,19 @@ class LegalAdvisorUI:
             with st.spinner("Analyzing…"):
                 result = self.chain.invoke({"query": query, "act": act_abbrev})
             st.markdown("### Answer")
-            st.write(result.content)
+            if isinstance(result, dict):
+                answer_obj = result.get("answer")
+                answer_text = answer_obj.answer if answer_obj else ""
+            else:
+                answer_text = result.answer
+            st.write(answer_text)
+
+            sources = result.get("sources") if isinstance(result, dict) else None
+            if sources:
+                st.markdown("### Sources")
+                for source in sources:
+                    citation = source.metadata.get("citation", "Unknown source")
+                    text = source.page_content
+                    with st.expander(citation):
+                        st.write(text)
+

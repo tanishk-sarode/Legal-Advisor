@@ -1,42 +1,57 @@
-from pathlib import Path
+from common.config import vectorstore, compressor
 
-from common.config import INGEST, vectorstore, compressor
 from core.chain import build_chain
-from core.indexer import build_all_documents, ingest_all
 from core.llm import get_answer_llm, get_retriever_llm
 from core.retrievers import build_retriever
+from core.schema import ExpandedQuery, FinalAnswer
+
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_classic.callbacks.file import FileCallbackHandler
+
+
 from ui.streamlit_app import LegalAdvisorUI
+
 
 LOG_PATH = "debug_rag_trace.txt"
 
-def maybe_ingest():
-    if not INGEST:
-        return
-    root = Path(__file__).resolve().parent
-    docs = build_all_documents(root)
-    ingest_all(vectorstore, docs)
-
 
 def build_app():
-    base_retriever = build_retriever(vectorstore, get_retriever_llm())
-    retriever = ContextualCompressionRetriever(
-        base_retriever=base_retriever,
-        base_compressor=compressor
+    # 1. Build base retriever
+    base_retriever = build_retriever(
+        vectorstore=vectorstore,
+        llm=get_retriever_llm(),
     )
+
+    # 2. Wrap with contextual compression (optional but valid)
+    # retriever = ContextualCompressionRetriever(
+    #     base_retriever=base_retriever,
+    #     base_compressor=compressor,
+    # )
+    retriever = base_retriever
+
+    # 3. LLMs
     answer_llm = get_answer_llm()
 
+    # 4. Output parsers (REQUIRED by build_chain)
+    query_parser = PydanticOutputParser(pydantic_object=ExpandedQuery)
+    answer_parser = PydanticOutputParser(pydantic_object=FinalAnswer)
+
+    # 5. Callbacks
     handler = FileCallbackHandler(LOG_PATH)
+
+    # 6. Build chain (signature now matches)
     chain = build_chain(
+        answer_llm=answer_llm,
         retriever=retriever,
-        answer_llm=answer_llm
+        answer_parser=answer_parser,
+        query_parser=query_parser,
     ).with_config({"callbacks": [handler]})
 
+    # 7. UI
     app = LegalAdvisorUI(chain)
     app.render()
 
 
 if __name__ == "__main__":
-    maybe_ingest()
     build_app()

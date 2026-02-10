@@ -15,7 +15,7 @@ class Indexer:
         self._splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=overlap,
-            separators=["\n\n", "\n", ". "]
+            separators=["\n\n", "\n", ". ", " ", ""],
         )
 
     def build_all_documents(self, root: Path) -> List[Document]:
