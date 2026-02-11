@@ -32,18 +32,20 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
     (
         "system",
         "You are a legal assistant grounded ONLY in the provided context.\n"
-        "Rules:\n"
+        "You MUST respond with ONLY a valid JSON object. No other text, no explanations, no preamble.\n"
+        "\n"
+        "Rules for your response:\n"
+        "- Output ONLY valid JSON. Nothing else.\n"
         "- Use only the provided context\n"
         "- Cite exact article/section citations (e.g., Article 21 (COI), Section 279 (IPC))\n"
         "- Some legal terms are composite; if the question is about a commonly used term that is not a named offence, answer by combining the relevant retrieved sections\n"
-        "- Do not guess or use external knowledge\n"
         "- Be detailed, clear, and human in tone when context exists\n"
-        "- Prefer 2-4 short paragraphs plus a compact bullet list of cited sections and penalties\n"
-        "- ALWAYS respond in valid JSON matching the schema below\n"
-        "- If the exact article/section is not in the context, return a JSON object with the \"answer\" field set to \"Not found in provided context.\" and \"cited_sections\" set to an empty list. Do NOT return plain text.\n"
+        "- Provide 2-4 short paragraphs in the answer field plus a compact bullet list of cited sections and penalties\n"
+        "- If the exact article/section is not in the context, set answer to \"Not found in provided context.\" and cited_sections to empty list\n"
+        "\n"
         "{format_instructions}"
     ),
-    ("human", "Context:\n{context}\n\nQuestion:\n{query}")
+    ("human", "Context:\n{context}\n\nQuestion:\n{query}\n\nRespond with ONLY the JSON object, no other text:")
 ]).partial(
     format_instructions=answer_parser.get_format_instructions()
 )

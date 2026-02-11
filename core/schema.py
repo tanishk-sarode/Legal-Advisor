@@ -63,3 +63,4 @@ class GraphState(TypedDict):
     expanded_query: ExpandedQuery
     docs: List[Document]
     act: Optional[str]
+    answer: Optional[FinalAnswer]
