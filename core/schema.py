@@ -50,11 +50,16 @@ class AnswerInput(TypedDict):
     query: str
     
 class ExpandedQuery(BaseModel):
-    primary_query: str
-    similar_queries: List[str]
+    primary_issue: str
+    sub_queries: List[str]
 
 
 class FinalAnswer(BaseModel):
     answer: str
     cited_sections: List[str]
 
+class GraphState(TypedDict):
+    query: str
+    expanded_query: ExpandedQuery
+    docs: List[Document]
+    act: Optional[str]

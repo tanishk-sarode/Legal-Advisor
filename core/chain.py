@@ -1,23 +1,16 @@
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.runnables import (
-    Runnable,
-    RunnableLambda,
-    RunnableParallel,
-    RunnablePassthrough,
-)
 from langchain_core.documents import Document
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.runnables import RunnableLambda
+from langgraph.graph import StateGraph, END
 
 from core.prompts import QUERY_GENERATOR_PROMPT, ANSWER_PROMPT
-from core.schema import ExpandedQuery, FinalAnswer, AnswerInput
+from core.schema import ExpandedQuery, FinalAnswer, AnswerInput, GraphState
 
 
-ChainState = Dict[str, Any]
-
-
-# ---------- Document Formatting (Runnable-native) ----------
+# ---------- Utilities ----------
 
 def format_docs(docs: List[Document]) -> str:
     return "\n\n".join(
@@ -26,32 +19,75 @@ def format_docs(docs: List[Document]) -> str:
     )
 
 
-# ---------- Prompt Input Builder (Typed) ----------
-
-def build_answer_input(x: AnswerInput) -> Dict[str, str]:
+def build_answer_input(state: GraphState) -> Dict[str, str]:
     return {
-        "context": format_docs(x["docs"]),
-        "query": x["query"],
+        "context": format_docs(state["docs"]),
+        "query": state["query"],
     }
+
+
+def dedupe_docs(docs: List[Document]) -> List[Document]:
+    seen = set()
+    unique = []
+    for d in docs:
+        key = (
+            d.metadata.get("citation"),
+            d.metadata.get("source"),
+            d.page_content,
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(d)
+    return unique
 
 
 # ---------- Chain Builder ----------
 
 def build_chain(
     answer_llm,
-    retriever,
+    vectorstore,
     answer_parser: PydanticOutputParser,
     query_parser: PydanticOutputParser,
-) -> Runnable:
-    """
-    Builds a LangChain RAG pipeline with:
-    - LLM-based query expansion
-    - Multi-query vector retrieval
-    - Runnable-native context injection
-    - Structured output parsing
-    """
+    *,
+    similarity_k: int = 8,
+):
 
-    # 1. Answer generation chain (NO deprecated APIs)
+
+    query_generator_chain = (
+        QUERY_GENERATOR_PROMPT
+        | answer_llm
+        | query_parser
+    )
+
+    def expand_query(state: GraphState):
+        expanded: ExpandedQuery = query_generator_chain.invoke(
+            {"query": state["query"]}
+        )
+        return {"expanded_query": expanded}
+
+    def retrieve_docs(state: GraphState):
+        expanded: ExpandedQuery = state["expanded_query"]
+
+        queries = (
+            expanded.sub_queries
+            if expanded.sub_queries
+            else [state["query"]]
+        )
+
+        docs: List[Document] = []
+
+        # simple multi-query retrieval (can add reranker later)
+        for q in queries:
+            docs.extend(
+                vectorstore.similarity_search(q, k=similarity_k)
+            )
+
+        return {"docs": docs}
+
+
+    def deduplicate(state: GraphState):
+        return {"docs": dedupe_docs(state["docs"])}
+
     answer_chain = (
         RunnableLambda(build_answer_input)
         | ANSWER_PROMPT.partial(
@@ -61,40 +97,25 @@ def build_chain(
         | answer_parser
     )
 
-    # 2. Query generator chain
-    query_generator_chain = (
-        QUERY_GENERATOR_PROMPT
-        | answer_llm
-        # print llm response for debugging
-        # | RunnableLambda(lambda x: print(f"Query generatorLLM response: {x}") or x)
-        | query_parser
-    )
+    def generate_answer(state: GraphState):
+        answer: FinalAnswer = answer_chain.invoke(state)
+        return {"answer": answer}
 
-    # 3. Expanded-query retrieval
-    def retrieve_with_expansion(x: ExpandedQuery) -> List[Document]:
-        queries = [x.primary_query, *x.similar_queries]
-        docs: List[Document] = []
-        for q in queries:
-            docs.extend(retriever.invoke(q))
-        return docs
 
-    retrieval_chain = (
-        query_generator_chain
-        | RunnableLambda(retrieve_with_expansion)
-        # | RunnableLambda(lambda docs: print(f"Retrieved documents \n \n {docs}") or docs)
-    )
+    builder = StateGraph(GraphState)
 
-    # 4. Full pipeline
-    chain = (
-        RunnablePassthrough.assign(query=lambda x: x["query"])
-        | RunnableParallel(
-            docs=retrieval_chain,
-            query=lambda x: x["query"],
-        )
-        | RunnableParallel(
-            answer=answer_chain,
-            sources=lambda x: x["docs"],
-        )
-    )
+    builder.add_node("expand_query", expand_query)
+    builder.add_node("retrieve_docs", retrieve_docs)
+    builder.add_node("deduplicate", deduplicate)
+    builder.add_node("generate_answer", generate_answer)
 
-    return chain
+    builder.set_entry_point("expand_query")
+
+    builder.add_edge("expand_query", "retrieve_docs")
+    builder.add_edge("retrieve_docs", "deduplicate")
+    builder.add_edge("deduplicate", "generate_answer")
+    builder.add_edge("generate_answer", END)
+
+    graph = builder.compile()
+
+    return graph

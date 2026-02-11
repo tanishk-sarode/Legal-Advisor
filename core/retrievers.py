@@ -1,12 +1,13 @@
-from langchain_classic.chains.query_constructor.schema import AttributeInfo
 from langchain_classic.retrievers import SelfQueryRetriever
+from langchain_classic.chains.query_constructor.schema import AttributeInfo 
 from langchain_community.query_constructors.opensearch import OpenSearchTranslator
 
 
-def build_retriever(vectorstore, llm):
+def build_retrievers(vectorstore, llm, *, similarity_k: int = 12, selfquery_k: int = 12):
     document_contents = (
         "Text of Indian legal provisions from the Constitution and statutory acts."
     )
+
     metadata_field_info = [
         AttributeInfo(
             name="act_abbrev",
@@ -45,11 +46,13 @@ def build_retriever(vectorstore, llm):
         ),
     ]
 
-    return SelfQueryRetriever.from_llm(
+    self_query_retriever = SelfQueryRetriever.from_llm(
         llm=llm,
         vectorstore=vectorstore,
         document_contents=document_contents,
         metadata_field_info=metadata_field_info,
         structured_query_translator=OpenSearchTranslator(),
-        search_kwargs={"k": 12},
+        search_kwargs={"k": selfquery_k},
     )
+
+    return vectorstore, self_query_retriever
