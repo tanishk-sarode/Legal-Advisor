@@ -27,6 +27,7 @@ class LegalAdvisorUI:
         if st.button("Ask") and query:
             with st.spinner("Analyzing…"):
                 result = self.chain.invoke({"query": query, "act": act_abbrev})
+            
             st.markdown("### Answer")
             if isinstance(result, dict):
                 answer_obj = result.get("answer")
@@ -37,10 +38,35 @@ class LegalAdvisorUI:
 
             sources = result.get("sources") if isinstance(result, dict) else None
             if sources:
-                st.markdown("### Sources")
-                for source in sources:
+                st.markdown("---")
+                st.markdown(f"### 📚 Sources ({len(sources)} retrieved)")
+                st.caption("Click on each source to view the full content")
+                
+                for idx, source in enumerate(sources, 1):
                     citation = source.metadata.get("citation", "Unknown source")
+                    act_name = source.metadata.get("act", "")
                     text = source.page_content
-                    with st.expander(citation):
+                    
+                    # Create a more detailed header for the expander
+                    expander_header = f"{idx}. {citation}"
+                    if act_name and citation and act_name not in citation:
+                        expander_header += f" - {act_name}"
+                    
+                    with st.expander(expander_header, expanded=False):
+                        # Display metadata
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if source.metadata.get("act"):
+                                st.markdown(f"**Act:** {source.metadata.get('act')}")
+                            if source.metadata.get("chapter"):
+                                st.markdown(f"**Chapter:** {source.metadata.get('chapter')}")
+                        with col2:
+                            if source.metadata.get("jurisdiction"):
+                                st.markdown(f"**Jurisdiction:** {source.metadata.get('jurisdiction')}")
+                            if source.metadata.get("source_type"):
+                                st.markdown(f"**Type:** {source.metadata.get('source_type')}")
+                        
+                        st.markdown("---")
+                        st.markdown("**Content:**")
                         st.write(text)
 

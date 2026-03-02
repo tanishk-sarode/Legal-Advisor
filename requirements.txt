@@ -3,3 +3,7 @@ langchain-core
 langchain-community
 langchain-aws
 langchain-classic
+opensearch-py
+boto3
+streamlit
+lark

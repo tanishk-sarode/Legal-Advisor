@@ -1,5 +1,5 @@
+from pydantic.v1.fields import FieldInfo as FieldInfoV1
 from common.config import vectorstore, compressor
-
 from core.chain import build_chain
 from core.llm import get_answer_llm, get_retriever_llm
 from core.retrievers import build_retrievers
@@ -17,13 +17,13 @@ LOG_PATH = "debug_rag_trace.txt"
 
 def build_app():
     # 1. Build retrievers
-    vectorstore_ref, self_query_retriever = build_retrievers(
-        vectorstore=vectorstore,
-        llm=get_retriever_llm(),
-    )
+    # vectorstore_ref, self_query_retriever = build_retrievers(
+    #     vectorstore=vectorstore,
+    #     llm=get_retriever_llm(),
+    # )
 
 
-    retriever = vectorstore_ref
+    retriever = vectorstore
 
     # 3. LLMs
     answer_llm = get_answer_llm()
@@ -34,11 +34,18 @@ def build_app():
 
     # 5. Build chain (custom human-readable logging only)
     chain = build_chain(
-        answer_llm=answer_llm,
+        answer_llm=answer_llm, 
         vectorstore=retriever,
         answer_parser=answer_parser,
         query_parser=query_parser,
     )
+
+    """
+    Order of operations in chain:
+    1. User query -> Expanded query (with legal search queries)
+    2. Expanded query -> Search retriever -> Retrieved docs
+    3. Retrieved docs + search queries + user query -> Final answer
+    """
 
     # 6. UI
     app = LegalAdvisorUI(chain)

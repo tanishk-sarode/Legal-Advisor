@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnableLambda
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 
 from core.prompts import QUERY_GENERATOR_PROMPT, ANSWER_PROMPT
 from core.schema import ExpandedQuery, FinalAnswer, AnswerInput, GraphState
@@ -20,11 +20,21 @@ def format_docs(docs: List[Document]) -> str:
 
 
 def build_answer_input(state: GraphState) -> Dict[str, str]:
+    # Format the search queries for context
+    search_queries = ""
+    if state.get("expanded_query") and state["expanded_query"].sub_queries:
+        search_queries = "\n---\n\nSearch queries used to find relevant sections:\n" 
+        for i, sq in enumerate(state["expanded_query"].sub_queries, 1): 
+            search_queries += f"{i}. {sq}\n"
+    
+    context = format_docs(state["docs"])
+    if search_queries:
+        context = search_queries + "\n" + context
+    
     return {
-        "context": format_docs(state["docs"]),
+        "context": context,
         "query": state["query"],
     }
-
 
 def dedupe_docs(docs: List[Document]) -> List[Document]:
     seen = set()
@@ -49,7 +59,7 @@ def build_chain(
     answer_parser: PydanticOutputParser,
     query_parser: PydanticOutputParser,
     *,
-    similarity_k: int = 8,
+    similarity_k: int = 12,
 ):
 
 
@@ -101,15 +111,21 @@ def build_chain(
         answer: FinalAnswer = answer_chain.invoke(state)
         return {"answer": answer}
 
+    def format_output(state: GraphState):
+        """Format the final output with answer and sources"""
+        return {
+            "answer": state["answer"],
+            "sources": state["docs"]
+        }
 
     builder = StateGraph(GraphState)
 
+    builder.add_edge(START, "expand_query")
     builder.add_node("expand_query", expand_query)
     builder.add_node("retrieve_docs", retrieve_docs)
     builder.add_node("deduplicate", deduplicate)
     builder.add_node("generate_answer", generate_answer)
 
-    builder.set_entry_point("expand_query")
 
     builder.add_edge("expand_query", "retrieve_docs")
     builder.add_edge("retrieve_docs", "deduplicate")
@@ -117,5 +133,13 @@ def build_chain(
     builder.add_edge("generate_answer", END)
 
     graph = builder.compile()
-
-    return graph
+    
+    # Wrap the graph to return formatted output
+    def chain_with_sources(inputs):
+        result = graph.invoke(inputs)
+        return {
+            "answer": result["answer"],
+            "sources": result["docs"]
+        }
+    
+    return RunnableLambda(chain_with_sources)
