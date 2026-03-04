@@ -1,5 +1,4 @@
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
@@ -7,7 +6,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, END, START
 
 from core.prompts import QUERY_GENERATOR_PROMPT, ANSWER_PROMPT
-from core.schema import ExpandedQuery, FinalAnswer, AnswerInput, GraphState
+from core.schema import ExpandedQuery, FinalAnswer, GraphState
 
 
 # ---------- Utilities ----------
@@ -110,13 +109,6 @@ def build_chain(
     def generate_answer(state: GraphState):
         answer: FinalAnswer = answer_chain.invoke(state)
         return {"answer": answer}
-
-    def format_output(state: GraphState):
-        """Format the final output with answer and sources"""
-        return {
-            "answer": state["answer"],
-            "sources": state["docs"]
-        }
 
     builder = StateGraph(GraphState)
 

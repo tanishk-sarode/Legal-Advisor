@@ -1,28 +1,15 @@
-from pydantic.v1.fields import FieldInfo as FieldInfoV1
-from common.config import vectorstore, compressor
+from common.config import vectorstore
 from core.chain import build_chain
-from core.llm import get_answer_llm, get_retriever_llm
-from core.retrievers import build_retrievers
+from core.llm import get_answer_llm
 from core.schema import ExpandedQuery, FinalAnswer
 
 from langchain_core.output_parsers import PydanticOutputParser
-from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
 
 
 from ui.streamlit_app import LegalAdvisorUI
 
 
-LOG_PATH = "debug_rag_trace.txt"
-
-
 def build_app():
-    # 1. Build retrievers
-    # vectorstore_ref, self_query_retriever = build_retrievers(
-    #     vectorstore=vectorstore,
-    #     llm=get_retriever_llm(),
-    # )
-
-
     retriever = vectorstore
 
     # 3. LLMs

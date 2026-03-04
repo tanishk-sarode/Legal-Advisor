@@ -7,13 +7,6 @@ INGEST = False  # Set True to run ingestion
 from opensearchpy import RequestsHttpConnection
 
 from langchain_community.vectorstores import OpenSearchVectorSearch
-from langchain_community.document_transformers import (
-    EmbeddingsRedundantFilter,
-    EmbeddingsClusteringFilter
-)
-from langchain_classic.retrievers.document_compressors import (
-    DocumentCompressorPipeline
-)
 
 from common.aws_setup import awsauth, embedding_function
 
@@ -40,27 +33,4 @@ def _build_vectorstore():
     )
 
 vectorstore = _build_vectorstore()
-
-semantic_retriever = vectorstore.as_retriever(
-    search_type="mmr",
-    search_kwargs={
-        "k": 16,
-        "fetch_k": 48
-    }
-)
-
-# -------------------------
-# Compressor (Late Stage)
-# -------------------------
-compressor = DocumentCompressorPipeline(
-    transformers=[
-        EmbeddingsClusteringFilter(
-            embeddings=embedding_function,
-            num_clusters=6
-        ),
-        EmbeddingsRedundantFilter(
-            embeddings=embedding_function
-        )
-    ]
-)
 
