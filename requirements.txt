@@ -7,3 +7,5 @@ opensearch-py
 boto3
 streamlit
 lark
+requests-aws4auth
+python-dotenv

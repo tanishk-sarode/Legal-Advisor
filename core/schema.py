@@ -60,6 +60,7 @@ class FinalAnswer(BaseModel):
 
 class GraphState(TypedDict):
     query: str
+    chat_history: Optional[str]
     expanded_query: ExpandedQuery
     docs: List[Document]
     act: Optional[str]

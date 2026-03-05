@@ -21,7 +21,11 @@ QUERY_GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
      "- Generate 6-10 high-quality retrieval queries\n"
      "{format_instructions}"
     ),
-    ("human", "User problem:\n{query}")
+    (
+        "human",
+        "Conversation history (for context/disambiguation only):\n{chat_history}\n\n"
+        "User problem:\n{query}",
+    )
 ]).partial(
     format_instructions=query_generator_parser.get_format_instructions()
 )
@@ -63,3 +67,21 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
 ]).partial(
     format_instructions=answer_parser.get_format_instructions()
 )
+
+
+ANSWER_STREAM_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are an expert legal assistant specializing in Indian law.\n"
+        "Use ONLY the provided legal context for legal claims.\n"
+        "Use conversation history only to resolve user intent and references.\n"
+        "If context is insufficient, clearly say: Not found in provided context.\n"
+        "Be concise but complete, with clear headings and practical steps.\n"
+    ),
+    (
+        "human",
+        "Conversation history:\n{chat_history}\n\n"
+        "Context:\n{context}\n\n"
+        "Question:\n{query}",
+    ),
+])

@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from common.config import vectorstore
+from common.chat_store import ChatStore
 from core.chain import build_chain
 from core.llm import get_answer_llm
 from core.schema import ExpandedQuery, FinalAnswer
@@ -10,7 +13,9 @@ from ui.streamlit_app import LegalAdvisorUI
 
 
 def build_app():
+    root = Path(__file__).resolve().parent
     retriever = vectorstore
+    chat_store = ChatStore(root / "data" / "chat_memory.db")
 
     # 3. LLMs
     answer_llm = get_answer_llm()
@@ -27,15 +32,10 @@ def build_app():
         query_parser=query_parser,
     )
 
-    """
-    Order of operations in chain:
-    1. User query -> Expanded query (with legal search queries)
-    2. Expanded query -> Search retriever -> Retrieved docs
-    3. Retrieved docs + search queries + user query -> Final answer
-    """
+
 
     # 6. UI
-    app = LegalAdvisorUI(chain)
+    app = LegalAdvisorUI(chain, chat_store=chat_store)
     app.render()
 
 
