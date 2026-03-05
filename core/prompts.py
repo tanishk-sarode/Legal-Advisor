@@ -1,6 +1,6 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from core.schema import ExpandedQuery, FinalAnswer
+from core.schema import ExpandedQuery, FinalAnswer, IntentDecision, RefinementQuery
 
 query_generator_parser = PydanticOutputParser(pydantic_object=ExpandedQuery)
 
@@ -64,6 +64,78 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages([
         "Question:\n{query}\n\n"
         "Respond with ONLY the JSON object:"
     )
+]).partial(
+    format_instructions=answer_parser.get_format_instructions()
+)
+
+
+router_parser = PydanticOutputParser(pydantic_object=IntentDecision)
+ROUTER_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are an intent router for an Indian legal assistant.\n"
+        "Classify the user's request into exactly one intent and detect if clarification is required.\n"
+        "Intents: legal_qa, section_finder, procedure_checklist, draft_helper, compare_provisions, risk_flagger.\n"
+        "Set needs_clarification=true only when key facts are missing and without them an answer would be unreliable.\n"
+        "If needs_clarification=true, provide one concise clarifying question.\n"
+        "Respond ONLY valid JSON.\n"
+        "{format_instructions}"
+    ),
+    (
+        "human",
+        "Conversation history:\n{chat_history}\n\nUser query:\n{query}",
+    ),
+]).partial(
+    format_instructions=router_parser.get_format_instructions()
+)
+
+
+refinement_parser = PydanticOutputParser(pydantic_object=RefinementQuery)
+REFINEMENT_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You generate follow-up retrieval queries for Indian legal research.\n"
+        "Use the initial retrieved context to identify missing angles and produce 2-4 focused follow-up queries.\n"
+        "Output ONLY JSON.\n"
+        "{format_instructions}"
+    ),
+    (
+        "human",
+        "Intent: {intent}\n\nUser query:\n{query}\n\nInitial context:\n{context}",
+    ),
+]).partial(
+    format_instructions=refinement_parser.get_format_instructions()
+)
+
+
+AGENT_ANSWER_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are an Indian legal copilot.\n"
+        "You must follow strict grounding and safety constraints:\n"
+        "1) Use ONLY provided context for legal claims.\n"
+        "2) Every citation in cited_sections must appear in context exactly.\n"
+        "3) If context is insufficient, answer must state: Not found in provided context.\n"
+        "4) Respect selected scope_act. If context extends beyond scope_act, set scope_warning.\n"
+        "5) Add escalation_notice for high-risk or high-impact legal situations.\n"
+        "Tool behaviors by intent:\n"
+        "- section_finder: provide most relevant sections/articles with short why.\n"
+        "- procedure_checklist: provide practical numbered checklist.\n"
+        "- draft_helper: produce a safe template with placeholders and assumptions.\n"
+        "- compare_provisions: compare provisions side-by-side in plain language.\n"
+        "- risk_flagger: highlight legal risks, missing facts, and uncertainties.\n"
+        "- legal_qa: provide direct grounded legal answer.\n"
+        "Respond ONLY valid JSON.\n"
+        "{format_instructions}"
+    ),
+    (
+        "human",
+        "Intent: {intent}\n"
+        "Selected scope_act: {scope_act}\n\n"
+        "Conversation history:\n{chat_history}\n\n"
+        "Context:\n{context}\n\n"
+        "Question:\n{query}"
+    ),
 ]).partial(
     format_instructions=answer_parser.get_format_instructions()
 )

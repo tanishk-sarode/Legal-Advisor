@@ -43,7 +43,7 @@ def make_document(text: str, metadata: Dict[str, Optional[str]]) -> Document:
     return Document(page_content=text, metadata=metadata)
 
 from pydantic import BaseModel
-from typing import List
+from typing import List, Literal
 
 class AnswerInput(TypedDict):
     docs: List[Document]
@@ -54,9 +54,30 @@ class ExpandedQuery(BaseModel):
     sub_queries: List[str]
 
 
+class IntentDecision(BaseModel):
+    intent: Literal[
+        "legal_qa",
+        "section_finder",
+        "procedure_checklist",
+        "draft_helper",
+        "compare_provisions",
+        "risk_flagger",
+    ]
+    needs_clarification: bool = False
+    clarifying_question: str = ""
+
+
+class RefinementQuery(BaseModel):
+    sub_queries: List[str]
+
+
 class FinalAnswer(BaseModel):
     answer: str
     cited_sections: List[str]
+    tool_used: str = "legal_qa"
+    risk_flags: List[str] = []
+    escalation_notice: str = ""
+    scope_warning: str = ""
 
 class GraphState(TypedDict):
     query: str
