@@ -23,3 +23,11 @@ awsauth = AWS4Auth(
     "aoss",
     session_token=credentials.token
 )
+
+dynamodb = boto3.client("dynamodb", 
+                        region_name=REGION, 
+                        aws_access_key_id=credentials.access_key, 
+                        aws_secret_access_key=credentials.secret_key, 
+                        aws_session_token=credentials.token)
+
+

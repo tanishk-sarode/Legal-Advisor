@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from common.config import vectorstore
-from common.chat_store import ChatStore
 from core.chain import build_chain
 from core.llm import get_answer_llm
 from core.schema import ExpandedQuery, FinalAnswer
+from stores.factory import build_chat_store
 
 from langchain_core.output_parsers import PydanticOutputParser
 
@@ -15,7 +15,7 @@ from ui.streamlit_app import LegalAdvisorUI
 def build_app():
     root = Path(__file__).resolve().parent
     retriever = vectorstore
-    chat_store = ChatStore(root / "data" / "chat_memory.db")
+    chat_store = build_chat_store(root)
 
     # 3. LLMs
     answer_llm = get_answer_llm()

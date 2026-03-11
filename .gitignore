@@ -21,6 +21,7 @@ dist/
 *.log
 *.trace
 *.out
+*.db
 debug_rag_trace.txt
 
 # OS / editor

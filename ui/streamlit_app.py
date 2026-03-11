@@ -4,7 +4,7 @@ from typing import Any
 import json
 import streamlit as st
 
-from common.chat_store import ChatStore
+from stores.chat_store import ChatStore
 from core.acts import get_act_sources, get_constitution_source
 from core.memory import build_running_summary, compose_memory_context
 
