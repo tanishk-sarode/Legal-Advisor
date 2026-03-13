@@ -1,1 +1,1 @@
-from stores.sqlite_chat_store import SQLiteChatStore as ChatStore
+from stores.chat_store import ChatStore

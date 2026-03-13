@@ -1,6 +1,13 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
-from core.schema import ExpandedQuery, FinalAnswer, IntentDecision, RefinementQuery
+from core.schema import (
+    CitationTriggerDecision,
+    ExpandedQuery,
+    FinalAnswer,
+    IntentDecision,
+    RefinementQuery,
+    SourceFilterDecision,
+)
 
 query_generator_parser = PydanticOutputParser(pydantic_object=ExpandedQuery)
 
@@ -157,3 +164,50 @@ ANSWER_STREAM_PROMPT = ChatPromptTemplate.from_messages([
         "Question:\n{query}",
     ),
 ])
+
+
+source_filter_parser = PydanticOutputParser(pydantic_object=SourceFilterDecision)
+SOURCE_FILTER_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are a retrieval source relevance judge for an Indian legal assistant.\n"
+        "Decide which retrieved sources are useful to answer the user's question.\n"
+        "A source is useful only if it directly helps answer legal issue, elements, procedure, remedy, or enforcement asked by user.\n"
+        "Return ONLY valid JSON.\n"
+        "Rules:\n"
+        "1) Use only source IDs that are present in the provided source list.\n"
+        "2) Include a source ID only if it is clearly relevant.\n"
+        "3) If none are useful, return an empty list.\n"
+        "{format_instructions}"
+    ),
+    (
+        "human",
+        "Question:\n{query}\n\nRetrieved sources:\n{sources}",
+    ),
+]).partial(
+    format_instructions=source_filter_parser.get_format_instructions()
+)
+
+
+citation_trigger_parser = PydanticOutputParser(pydantic_object=CitationTriggerDecision)
+CITATION_TRIGGER_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You extract explicit legal citation references from user requests about Indian law.\n"
+        "Identify only explicit references like Article 21, Section 420 IPC, CrPC, Constitution, etc.\n"
+        "Return ONLY valid JSON.\n"
+        "Rules:\n"
+        "1) Set has_explicit_references=true only when clear references are present.\n"
+        "2) Use kind as one of: article, section, act.\n"
+        "3) Keep identifier as the exact number/name text seen in query.\n"
+        "4) Put act_abbrev when explicit (IPC, CrPC, CPC, COI, HMA, IEA, NIA, MVA, IDA), else empty string.\n"
+        "5) confidence must be between 0 and 1.\n"
+        "{format_instructions}"
+    ),
+    (
+        "human",
+        "Conversation history:\n{chat_history}\n\nQuestion:\n{query}",
+    ),
+]).partial(
+    format_instructions=citation_trigger_parser.get_format_instructions()
+)

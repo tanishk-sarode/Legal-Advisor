@@ -14,9 +14,38 @@ def utc_now_iso() -> str:
 
 
 class DynamoChatStore(ChatStore):
-    def __init__(self, table_name: str, region_name: str | None = None):
-        dynamodb: Any = boto3.resource("dynamodb", region_name=region_name)
-        self.table = dynamodb.Table(table_name)
+    def __init__(
+        self,
+        table_name: str,
+        region_name: str | None = None,
+        session: boto3.Session | None = None,
+    ):
+        _boto_session: Any = session or boto3.Session()
+        self._dynamodb: Any = _boto_session.resource("dynamodb", region_name=region_name)
+        self._table_name = table_name
+        self._ensure_table()
+        self.table = self._dynamodb.Table(table_name)
+
+    def _ensure_table(self) -> None:
+        from botocore.exceptions import ClientError
+        try:
+            self._dynamodb.Table(self._table_name).load()
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ResourceNotFoundException":
+                raise
+            self._dynamodb.create_table(
+                TableName=self._table_name,
+                AttributeDefinitions=[
+                    {"AttributeName": "PK", "AttributeType": "S"},
+                    {"AttributeName": "SK", "AttributeType": "S"},
+                ],
+                KeySchema=[
+                    {"AttributeName": "PK", "KeyType": "HASH"},
+                    {"AttributeName": "SK", "KeyType": "RANGE"},
+                ],
+                BillingMode="PAY_PER_REQUEST",
+            )
+            self._dynamodb.Table(self._table_name).wait_until_exists()
 
     def _thread_pk(self, user_id: str) -> str:
         return f"USER#{user_id}"

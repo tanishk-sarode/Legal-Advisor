@@ -71,6 +71,22 @@ class RefinementQuery(BaseModel):
     sub_queries: List[str]
 
 
+class SourceFilterDecision(BaseModel):
+    useful_source_ids: List[str]
+
+
+class CitationReference(BaseModel):
+    kind: Literal["article", "section", "act"]
+    identifier: str
+    act_abbrev: str = ""
+
+
+class CitationTriggerDecision(BaseModel):
+    has_explicit_references: bool = False
+    references: List[CitationReference] = []
+    confidence: float = 0.0
+
+
 class FinalAnswer(BaseModel):
     answer: str
     cited_sections: List[str]

@@ -6,7 +6,15 @@ __pycache__/
 *.pkl
 .venv/
 venv/
-.env/
+
+# Environment / secrets  ← NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Virtual environment (alternate names)
+env/
+ENV/
 
 # Packaging / build
 build/
@@ -23,6 +31,9 @@ dist/
 *.out
 *.db
 debug_rag_trace.txt
+
+# Runtime-generated files
+.streamlit/device_id.txt
 
 # OS / editor
 .DS_Store
