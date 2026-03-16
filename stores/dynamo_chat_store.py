@@ -20,7 +20,9 @@ class DynamoChatStore(ChatStore):
         region_name: str | None = None,
         session: boto3.Session | None = None,
     ):
-        _boto_session: Any = session or boto3.Session()
+        """Initializes the DynamoChatStore with the given DynamoDB table name and AWS region."""
+
+        _boto_session: boto3.Session = session or boto3.Session()
         self._dynamodb: Any = _boto_session.resource("dynamodb", region_name=region_name)
         self._table_name = table_name
         self._ensure_table()
